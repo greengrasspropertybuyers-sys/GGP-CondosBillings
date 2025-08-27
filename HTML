@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GGP 6-Unit Billing — Standalone</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--g:#2f7d32;--b:#111827;--m:#6b7280;--bg:#f9fafb;--card:#ffffff;--bd:#e5e7eb;}
+  *{box-sizing:border-box} html,body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--b);}
+  body{background:var(--bg);}
+  .container{max-width:1120px;margin:0 auto;padding:16px 20px;}
+  h1{font-size:22px;margin:0 0 6px} .sub{color:var(--m);font-size:13px;margin-bottom:14px}
+  .row{display:grid;grid-template-columns:1fr;gap:14px} @media(min-width:760px){.row-2{grid-template-columns:2fr 1fr} .row-3{grid-template-columns:repeat(3,1fr)}}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;margin:10px 0;}
+  .card h3{margin:0 0 10px;font-size:16px}
+  label{font-size:12px;color:#374151;display:block;margin:6px 0 4px}
+  input[type=text],input[type=number],input[type=month],textarea,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;background:#fff}
+  textarea{min-height:80px;resize:vertical}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:8px;border-bottom:1px solid var(--bd);text-align:right} th{text-align:left;background:#f3f4f6;color:#374151}
+  .btn{appearance:none;border:1px solid var(--bd);padding:9px 12px;border-radius:10px;background:#fff;cursor:pointer}
+  .btn.primary{background:var(--g);color:white;border-color:var(--g)} .btn.outline{background:#fff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+  .note{color:var(--m);font-size:12px}
+  .pill{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:2px 8px;border-radius:999px;font-size:12px}
+  .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .right{text-align:right}
+  .grid{display:grid;gap:8px}
+  .grid-2{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(3,1fr)}
+  .hidden{display:none}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="flex" style="justify-content:space-between">
+    <div>
+      <h1>6-Unit Gas Billing (Standalone)</h1>
+      <div class="sub">Local-first • autosaves • export JSON • generate PDFs</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="btnExport">Export JSON</button>
+      <label class="btn outline" for="importFile">Import JSON</label>
+      <input id="importFile" type="file" class="hidden" accept="application/json">
+      <button class="btn" id="btnReset">Reset</button>
+    </div>
+  </div>
+
+  <div class="card row row-3">
+    <div>
+      <label>Billing Month (YYYY-MM)</label>
+      <input id="ym" type="month">
+    </div>
+    <div>
+      <label>Total Gas ($)</label>
+      <input id="gas" type="number" step="0.01">
+    </div>
+    <div>
+      <label>Common/Stairwell ($)</label>
+      <input id="common" type="number" step="0.01">
+    </div>
+    <div class="grid grid-2" style="grid-column:1/-1">
+      <div class="actions">
+        <button class="btn primary" id="btnSave">Save Month</button>
+        <button class="btn outline" id="btnClear">Clear Balances</button>
+        <span class="note">“Save Month” writes new balances for next month; not required to see live math below.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Enter Current Readings (Prev auto-fills)</h3>
+    <div class="grid grid-2">
+      <div class="note">Active units share common fee (toggle: Bills → Preferences)</div>
+      <div class="right"><span class="pill" id="utilMonthTag"></span></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Unit</th><th>Tenant</th><th>Active</th><th class="right">Prev</th><th class="right">Current</th>
+            <th class="right">Usage</th><th class="right">Gas $</th><th class="right">Common $</th><th class="right">Adj</th>
+            <th class="right">Total Due</th><th class="right">Paid</th><th class="right">Bal After</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5">Totals</td>
+            <td id="tUsage" class="right"></td>
+            <td id="tGas" class="right"></td>
+            <td id="tCommon" class="right"></td>
+            <td class="right">—</td>
+            <td id="tDue" class="right"></td>
+            <td id="tPaid" class="right"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="row row-2">
+    <div class="card">
+      <h3>Units & Tenants</h3>
+      <div id="units"></div>
+    </div>
+
+    <div class="card">
+      <h3>Bills → Letterhead & Preferences</h3>
+      <label>Company / Landlord Name</label><input id="llName" type="text" value="Green Grass Condos LLC">
+      <label>Business Address (letterhead)</label><input id="llAddr" type="text" value="480 12th Ave SW, Le Mars, IA 51031">
+      <label>Premises / Service Address</label><input id="premises" type="text" value="480 12th Ave SW, Le Mars, IA 51031">
+      <div class="grid grid-2">
+        <div>
+          <label>Phone</label><input id="llPhone" type="text" value="(712) 305-5040">
+        </div>
+        <div>
+          <label>Email</label><input id="llEmail" type="text" value="GreenGrassPropertyBuyers@gmail.com">
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div>
+          <label>Due Day (1–31)</label><input id="dueDay" type="number" min="1" max="31" value="1">
+        </div>
+        <div>
+          <label>Bill uses PRIOR-month utilities</label>
+          <select id="usePrev"><option value="true" selected>Yes</option><option value="false">No (current month)</option></select>
+        </div>
+        <div>
+          <label>Split common across</label>
+          <select id="splitCommon"><option value="active" selected>Active units only</option><option value="all">All 6 units</option></select>
+        </div>
+      </div>
+      <label>Payment Instructions (shows on PDF)</label>
+      <textarea id="payInst">Make checks payable to Green Grass Condos LLC. Mail or deliver to the address above.</textarea>
+      <label>Legal Notes (shows on PDF)</label>
+      <textarea id="legalNotes">This statement is for rent and utilities as provided in your signed lease. Late fees, grace periods, and other terms are governed by your lease and applicable Iowa law. Payment after the due date may incur late fees. Returned checks may incur a service charge. Nonpayment may result in notice consistent with the Iowa Uniform Residential Landlord and Tenant Law. This statement is not a receipt.</textarea>
+
+      <label>Logo (optional)</label>
+      <input id="logoFile" type="file" accept="image/*"><br>
+      <img id="logoPreview" src="" alt="logo" style="height:64px;border:1px solid var(--bd);border-radius:6px;margin-top:6px">
+
+      <div class="flex" style="margin-top:10px">
+        <button class="btn" id="btnPDF6">Download 6 PDFs</button>
+        <button class="btn outline" id="btnPDF1">Download 1 PDF (6 pages)</button>
+        <button class="btn" id="btnSample">Open Sample PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+const STORAGE_KEY = "ggp_6plex_standalone_v3";
+const { jsPDF } = window.jspdf;
+
+// ---------- helpers
+const FMT = (n) => (isFinite(n) ? Number(n).toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 }) : "0.00");
+const r2 = (n) => Math.round((Number(n||0)+Number.EPSILON)*100)/100;
+const ymKey = (s) => { const d = s?.length===7? new Date(s+"-01T00:00:00"): new Date(s||Date.now()); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; };
+const prevYm = (ym) => { const [y,m] = ym.split("-").map(Number); const d = new Date(y,(m||1)-1,1); d.setMonth(d.getMonth()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` }
+const fmtYM = (ym) => { const [y,m] = ym.split("-").map(Number); return new Date(y,(m||1)-1,1).toLocaleDateString(undefined, { month:"long", year:"numeric" }); };
+const dueDateFromYM = (ym, day=1) => { const [y,m]=ym.split("-").map(Number); const d = new Date(y,(m||1)-1, Math.max(1, Math.min(31, Number(day)||1))); return d.toLocaleDateString(undefined, {year:"numeric", month:"long", day:"2-digit"}); };
+
+function nowYM() { return new Date().toISOString().slice(0,7); }
+
+// ---------- state
+const DEFAULT_UNITS = Array.from({length:6}, (_,i)=>({id:i+1,name:`Unit ${i+1}`,active:true,startingReading:"",rent:"",notes:""}));
+const defaultState = {
+  units: DEFAULT_UNITS,
+  settings: {
+    roundingMode:"highest-usage",
+    rotateIndex:0,
+    commonSplitActiveOnly:true,
+    bill: {
+      landlordName:"Green Grass Condos LLC",
+      landlordAddress:"480 12th Ave SW, Le Mars, IA 51031",
+      landlordPhone:"(712) 305-5040",
+      landlordEmail:"GreenGrassPropertyBuyers@gmail.com",
+      premisesAddress:"480 12th Ave SW, Le Mars, IA 51031",
+      dueDay:1,
+      logoDataUrl: document.getElementById("logoPreview").src || "",
+      footerNotes:"Please pay rent by the 1st. Utilities reflect the prior month's usage.",
+      paymentInstructions:"Make checks payable to Green Grass Condos LLC. Mail or deliver to the address above.",
+      includeOlderBalance:false,
+      usePrevUtilities:true,
+      legalNotes: document.getElementById("legalNotes").value
+    }
+  },
+  months: {},
+  balances: {}
+};
+
+let state = (()=>{ try{ return Object.assign({}, defaultState, JSON.parse(localStorage.getItem(STORAGE_KEY)||"null")||{}); }catch{ return structuredClone(defaultState); } })();
+
+function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+// ---------- compute
+function computeMonth(ym) {
+  const s = state;
+  const month = s.months[ym] || { gasBill:0, commonBill:0, readings:{}, payments:{} };
+  const pm = s.months[prevYm(ym)];
+  const active = s.units.filter(u=>u.active);
+  const activeCount = active.length || 1;
+  const prevOf = (u) => (pm?.readings?.[u.id]!==undefined && pm.readings[u.id]!=="" ? Number(pm.readings[u.id])||0 : Number(u.startingReading)||0);
+  const rows = s.units.map(u=>{ const prev = prevOf(u); const curRaw = month.readings?.[u.id]; const cur = curRaw===""||curRaw==null? "": Number(curRaw); const usage = u.active && cur!=="" ? Math.max(0,(cur||0)-(prev||0)) : 0; return {unitId:u.id,name:u.name,active:u.active,prev,cur,usage}; });
+  const totalUsage = rows.reduce((a,r)=>a+(r.active?r.usage:0),0);
+  rows.forEach(r=>{ const pct = totalUsage>0 && r.active ? r.usage/totalUsage : 0; r.gasShare = pct*(Number(month.gasBill)||0); const div = state.settings.commonSplitActiveOnly ? activeCount : s.units.length; r.commonShare = r.active ? (Number(month.commonBill)||0)/(div||1):0; r.total = r2(r.gasShare + r.commonShare); });
+  const target = (Number(month.gasBill)||0) + (Number(month.commonBill)||0);
+  let diff = r2(target - rows.reduce((a,r)=>a+r.total,0));
+  let idx = -1;
+  if (s.settings.roundingMode==="highest-usage") { idx = rows.map((r,i)=>({i,u:r.usage,a:r.active})).filter(x=>x.a).sort((A,B)=>B.u-A.u)[0]?.i ?? -1; }
+  else { const ids = rows.map((r,i)=>r.active?i:null).filter(x=>x!=null); if (ids.length) idx = ids[s.settings.rotateIndex % ids.length]; }
+  rows.forEach(r=>r.roundAdj=0); if (idx>=0 && Math.abs(diff)>=0.01) rows[idx].roundAdj = diff; rows.forEach(r=>r.totalDue = r2(r.total + r.roundAdj));
+  const payments = month.payments || {};
+  const balancesAfter = {};
+  s.units.forEach(u=>{ const prevBal = Number(s.balances?.[u.id] ?? 0); const billed = rows.find(r=>r.unitId===u.id)?.totalDue||0; const paid = Number(payments[u.id]||0); balancesAfter[u.id] = r2(prevBal + billed - paid); });
+  return { rows, totals: { usage: rows.reduce((a,r)=>a+r.usage,0), gas: r2(rows.reduce((a,r)=>a+r.gasShare,0)), common: r2(rows.reduce((a,r)=>a+r.commonShare,0)), due: r2(rows.reduce((a,r)=>a+r.totalDue,0)), paid: r2(Object.values(payments).reduce((a,v)=>a+Number(v||0),0)) }, balancesAfter };
+}
+
+function computeBills(ym) {
+  const cur = ymKey(ym); const prev = prevYm(cur);
+  const utilYm = state.settings.bill.usePrevUtilities ? prev : cur;
+  const snap = computeMonth(utilYm);
+  const rows = state.units.map(u=>{ const utilPrev = snap.rows.find(r=>r.unitId===u.id)?.totalDue || 0; const rent = Number(u.rent||0); const older = state.settings.bill.includeOlderBalance ? Number(state.balances?.[u.id]||0) : 0; return { unitId:u.id, name:u.name, rent, utilPrev, older, totalNow: r2(rent+utilPrev+older) }; });
+  const totals = { rent: r2(rows.reduce((a,r)=>a+r.rent,0)), utilPrev: r2(rows.reduce((a,r)=>a+r.utilPrev,0)), older: r2(rows.reduce((a,r)=>a+r.older,0)), totalNow: r2(rows.reduce((a,r)=>a+r.totalNow,0)) };
+  return { rows, totals, cur, utilYm };
+}
+
+// ---------- UI bindings
+const $ = (id)=>document.getElementById(id);
+
+// init fields
+$("ym").value = nowYM();
+function ensureMonth(){ const k = ymKey($("ym").value); if (!state.months[k]) state.months[k] = { gasBill:"", commonBill:"", readings:{}, payments:{} }; }
+ensureMonth();
+$("gas").value = state.months[ymKey($("ym").value)].gasBill || "";
+$("common").value = state.months[ymKey($("ym").value)].commonBill || "";
+$("llName").value = state.settings.bill.landlordName || "";
+$("llAddr").value = state.settings.bill.landlordAddress || "";
+$("premises").value = state.settings.bill.premisesAddress || "";
+$("llPhone").value = state.settings.bill.landlordPhone || "";
+$("llEmail").value = state.settings.bill.landlordEmail || "";
+$("dueDay").value = state.settings.bill.dueDay || 1;
+$("usePrev").value = state.settings.bill.usePrevUtilities ? "true":"false";
+$("splitCommon").value = state.settings.commonSplitActiveOnly ? "active":"all";
+$("payInst").value = state.settings.bill.paymentInstructions || "";
+$("legalNotes").value = state.settings.bill.legalNotes || $("legalNotes").value;
+
+// units editor
+function renderUnits(){
+  const host = $("units"); host.innerHTML = "";
+  state.units.forEach((u,i)=>{
+    const row = document.createElement("div");
+    row.className = "grid grid-3";
+    row.innerHTML = `
+      <div><label>Unit ${u.id} Tenant</label><input data-k="name" data-i="${i}" value="${u.name||""}"></div>
+      <div><label>Start Reading</label><input type="number" step="0.1" data-k="startingReading" data-i="${i}" value="${u.startingReading||""}"></div>
+      <div><label>Monthly Rent ($)</label><input type="number" step="0.01" data-k="rent" data-i="${i}" value="${u.rent||""}"></div>
+      <div><label>Active</label><select data-k="active" data-i="${i}"><option value="true" ${u.active?"selected":""}>Yes</option><option value="false" ${!u.active?"selected":""}>No</option></select></div>
+      <div class="grid" style="grid-column:1/-1"><label>Notes</label><input data-k="notes" data-i="${i}" value="${u.notes||""}"></div>
+    `;
+    host.appendChild(row);
+  });
+  host.querySelectorAll("input,select").forEach(el=>{
+    el.addEventListener("change",(e)=>{ const i = Number(el.dataset.i); const k = el.dataset.k; let v = el.value; if (k==="active") v = (v==="true"); state.units[i][k]=v; persist(); render(); });
+  });
+}
+
+// month table
+function renderTable(){
+  ensureMonth();
+  const ym = ymKey($("ym").value);
+  const month = state.months[ym];
+  $("utilMonthTag").textContent = "Utilities used on bills: " + fmtYM(state.settings.bill.usePrevUtilities ? prevYm(ym) : ym);
+  const snap = computeMonth(ym);
+  const tb = $("tbody"); tb.innerHTML="";
+  state.units.forEach((u)=>{
+    const r = snap.rows.find(x=>x.unitId===u.id);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="right">${r.unitId}</td>
+      <td style="text-align:left"><input style="width:150px" value="${u.name||""}" data-unit="${u.id}" data-type="name"></td>
+      <td style="text-align:left">${u.active?"Yes":"No"}</td>
+      <td class="right">${FMT(r.prev)}</td>
+      <td class="right"><input style="width:110px;text-align:right" type="number" step="0.1" value="${month.readings?.[u.id]??""}" data-unit="${u.id}" data-type="reading"></td>
+      <td class="right">${FMT(r.usage)}</td>
+      <td class="right">${FMT(r.gasShare||0)}</td>
+      <td class="right">${FMT(r.commonShare||0)}</td>
+      <td class="right">${r.roundAdj?FMT(r.roundAdj):"—"}</td>
+      <td class="right"><b>${FMT(r.totalDue)}</b></td>
+      <td class="right"><input style="width:110px;text-align:right" type="number" step="0.01" value="${month.payments?.[u.id]??""}" data-unit="${u.id}" data-type="payment"></td>
+      <td class="right"><b>${FMT(snap.balancesAfter[u.id]||0)}</b></td>
+    `;
+    tb.appendChild(tr);
+  });
+  // totals
+  $("tUsage").textContent = FMT(snap.totals.usage);
+  $("tGas").textContent = FMT(snap.totals.gas);
+  $("tCommon").textContent = FMT(snap.totals.common);
+  $("tDue").textContent = FMT(snap.totals.due);
+  $("tPaid").textContent = FMT(snap.totals.paid);
+
+  // listeners
+  tb.querySelectorAll("input").forEach(el=>{
+    el.addEventListener("change", (e)=>{
+      const id = Number(el.dataset.unit);
+      const t = el.dataset.type;
+      if (t==="reading") { state.months[ym].readings[id] = el.value; }
+      else if (t==="payment") { state.months[ym].payments[id] = el.value; }
+      else if (t==="name") { const u = state.units.find(x=>x.id===id); u.name = el.value; }
+      persist(); render();
+    });
+  });
+}
+
+function render(){ 
+  $("gas").value = state.months[ymKey($("ym").value)].gasBill || "";
+  $("common").value = state.months[ymKey($("ym").value)].commonBill || "";
+  renderUnits(); renderTable();
+}
+
+// ---------- PDF
+function savePDF(doc, filename) {
+  try { doc.save(filename); }
+  catch(e1){ try{ const blob = doc.output("blob"); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+  catch(e2){ try{ doc.output("dataurlnewwindow"); }catch(e3){ alert("PDF blocked. Allow pop-ups/downloads for this file."); } } }
+}
+
+function renderBill(doc, row, meta){ 
+  const pad=42; let y=pad; const pageW=612, right=pageW-pad, headerX=pad+110, headerW=right-headerX;
+  if (meta.logo) { try{ doc.addImage(meta.logo, "PNG", pad, y-6, 88, 88); }catch(e){} }
+  doc.setTextColor(47,125,50); doc.setFontSize(22); doc.setFont(undefined,"bold");
+  const nameLines = doc.splitTextToSize(meta.llName||"Landlord", headerW); doc.text(nameLines, headerX, y+12);
+  doc.setTextColor(0,0,0); doc.setFontSize(10); doc.setFont(undefined,"normal");
+  let yInfo = y+34 + (nameLines.length-1)*12;
+  const addr = doc.splitTextToSize(meta.llAddr||"", headerW); if (addr.length){ doc.text(addr, headerX, yInfo); yInfo+=addr.length*12; }
+  if (meta.llPhone){ doc.text(doc.splitTextToSize(meta.llPhone, headerW), headerX, yInfo); yInfo+=12; }
+  if (meta.llEmail){ doc.text(doc.splitTextToSize(meta.llEmail, headerW), headerX, yInfo); yInfo+=12; }
+  doc.setDrawColor(47,125,50); doc.setLineWidth(1.5); doc.line(pad, y+78, right, y+78); y = y+100;
+
+  const dueDate = dueDateFromYM(meta.billMonth, meta.dueDay||1);
+  doc.setFont(undefined,"bold"); doc.setFontSize(18); doc.text("Rent & Utility Statement", pad, y);
+  doc.setFont(undefined,"normal"); doc.setFontSize(10);
+  doc.text(`Billing Month (Rent): ${fmtYM(meta.billMonth)}`, right, y-2, {align:"right"}); y+=16;
+  doc.text(`Utilities Month: ${fmtYM(meta.utilMonth)}`, right, y-2, {align:"right"}); y+=16;
+  doc.text(`Statement #: ${meta.billMonth.replace(/-/g,"")}-${String(row.unitId).padStart(2,"0")}`, right, y-2, {align:"right"}); y+=16;
+  doc.text(`Due Date: ${dueDate}`, right, y-2, {align:"right"});
+
+  y+=8; doc.setFont(undefined,"bold"); doc.setFontSize(12); doc.text("Bill To:", pad, y); y+=14;
+  doc.setFont(undefined,"normal"); doc.setFontSize(11); doc.text(row.name || `Unit ${row.unitId}`, pad, y); y+=14;
+  const premises = meta.premises || meta.llAddr || ""; if (premises){ const p = doc.splitTextToSize(`Premises: ${premises}`, right-pad); doc.text(p, pad, y); y+=p.length*12; }
+
+  y+=8; const colL=pad, colR=right, colMid=right-140;
+  doc.setFont(undefined,"bold"); doc.setFontSize(11); doc.text("Description", colL, y); doc.text("Amount", colR, y, {align:"right"}); y+=10;
+  doc.setDrawColor(200); doc.setLineWidth(0.6); doc.line(colL, y, colR, y); y+=14;
+  doc.setFont(undefined,"normal");
+  const line=(k,v)=>{ doc.text(k,colL,y); doc.text(`$${FMT(v)}`, colR, y, {align:"right"}); y+=18; };
+  line("Current Month Rent", row.rent);
+  line(`Utilities (${fmtYM(meta.utilMonth)})`, row.utilPrev);
+  if (row.older && Number(row.older)) line("Older Unpaid Balance", row.older);
+  y+=6; doc.setLineWidth(0.6); doc.line(colMid, y, colR, y); y+=16;
+  doc.setFont(undefined,"bold"); doc.text("Amount Due Now", colMid, y); doc.text(`$${FMT(row.totalNow)}`, colR, y, {align:"right"}); y+=24;
+
+  if (meta.payInst){ doc.setFont(undefined,"normal"); doc.setFontSize(10); const lines = doc.splitTextToSize(meta.payInst, right-pad); doc.text(lines, pad, y); y+=lines.length*12+6; }
+  if (meta.legalNotes){ doc.setFontSize(9); const lines = doc.splitTextToSize(meta.legalNotes, right-pad); doc.text(lines, pad, y); }
+  doc.setFontSize(8); doc.text("This is a statement, not a receipt. Keep a copy for your records.", pad, 770);
+  doc.text("Generated by GGP Billing", right, 770, {align:"right"});
+}
+
+function billMeta(curYM){ 
+  const utilYm = state.settings.bill.usePrevUtilities ? prevYm(curYM) : curYM;
+  return {
+    billMonth: curYM,
+    utilMonth: utilYm,
+    llName: document.getElementById("llName").value,
+    llAddr: document.getElementById("llAddr").value,
+    llPhone: document.getElementById("llPhone").value,
+    llEmail: document.getElementById("llEmail").value,
+    premises: document.getElementById("premises").value,
+    dueDay: Number(document.getElementById("dueDay").value)||1,
+    payInst: document.getElementById("payInst").value,
+    legalNotes: document.getElementById("legalNotes").value,
+    logo: document.getElementById("logoPreview").src || ""
+  };
+}
+
+function pdfAll(){ const curYM = ymKey(document.getElementById("ym").value); const b = computeBills(curYM); b.rows.forEach((r,i)=>{ const d=new jsPDF({unit:"pt",format:"letter"}); renderBill(d, r, billMeta(b.cur)); savePDF(d, `${b.cur}-${(r.name||("Unit "+r.unitId)).replace(/[^a-z0-9]+/gi,"-")}-bill.pdf`); }); }
+function pdfMerged(){ const curYM = ymKey(document.getElementById("ym").value); const b = computeBills(curYM); const d = new jsPDF({unit:"pt",format:"letter"}); b.rows.forEach((r,i)=>{ if(i>0) d.addPage(); renderBill(d,r,billMeta(b.cur)); }); savePDF(d, `${b.cur}-all-units-bills.pdf`); }
+function pdfSample(){ const curYM = ymKey(document.getElementById("ym").value); const d=new jsPDF({unit:"pt",format:"letter"}); const row={unitId:1,name:"Unit 1",rent:750,utilPrev:39.82,older:0,totalNow:789.82}; renderBill(d,row,billMeta(curYM)); d.output("dataurlnewwindow"); }
+
+// ---------- events
+document.getElementById("ym").addEventListener("change", ()=>{ ensureMonth(); render(); persist(); });
+document.getElementById("gas").addEventListener("change", ()=>{ ensureMonth(); state.months[ymKey(document.getElementById("ym").value)].gasBill = document.getElementById("gas").value; persist(); render(); });
+document.getElementById("common").addEventListener("change", ()=>{ ensureMonth(); state.months[ymKey(document.getElementById("ym").value)].commonBill = document.getElementById("common").value; persist(); render(); });
+document.getElementById("btnSave").addEventListener("click", ()=>{ const ym = ymKey(document.getElementById("ym").value); const snap = computeMonth(ym); state.balances = snap.balancesAfter; persist(); alert("Balances carried forward for next month."); render(); });
+document.getElementById("btnClear").addEventListener("click", ()=>{ if(!confirm("Set ALL unit balances to $0.00?")) return; state.balances={}; persist(); render(); alert("Balances cleared to $0.00. (Current month charges still show in Bal After.)"); });
+
+document.getElementById("btnPDF6").addEventListener("click", pdfAll);
+document.getElementById("btnPDF1").addEventListener("click", pdfMerged);
+document.getElementById("btnSample").addEventListener("click", pdfSample);
+
+document.getElementById("llName").addEventListener("change",()=>{state.settings.bill.landlordName=document.getElementById("llName").value; persist();});
+document.getElementById("llAddr").addEventListener("change",()=>{state.settings.bill.landlordAddress=document.getElementById("llAddr").value; persist();});
+document.getElementById("premises").addEventListener("change",()=>{state.settings.bill.premisesAddress=document.getElementById("premises").value; persist();});
+document.getElementById("llPhone").addEventListener("change",()=>{state.settings.bill.landlordPhone=document.getElementById("llPhone").value; persist();});
+document.getElementById("llEmail").addEventListener("change",()=>{state.settings.bill.landlordEmail=document.getElementById("llEmail").value; persist();});
+document.getElementById("dueDay").addEventListener("change",()=>{state.settings.bill.dueDay=Number(document.getElementById("dueDay").value)||1; persist(); render();});
+document.getElementById("usePrev").addEventListener("change",()=>{state.settings.bill.usePrevUtilities=(document.getElementById("usePrev").value==="true"); persist(); render();});
+document.getElementById("splitCommon").addEventListener("change",()=>{state.settings.commonSplitActiveOnly=(document.getElementById("splitCommon").value==="active"); persist(); render();});
+document.getElementById("payInst").addEventListener("change",()=>{state.settings.bill.paymentInstructions=document.getElementById("payInst").value; persist();});
+document.getElementById("legalNotes").addEventListener("change",()=>{state.settings.bill.legalNotes=document.getElementById("legalNotes").value; persist();});
+
+document.getElementById("logoFile").addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ document.getElementById("logoPreview").src=r.result; state.settings.bill.logoDataUrl=r.result; persist(); }; r.readAsDataURL(f); });
+
+// export / import / reset
+document.getElementById("btnExport").addEventListener("click",()=>{ const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"}); const url = URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="6plex-gas-data.json"; a.click(); URL.revokeObjectURL(url); });
+document.getElementById("importFile").addEventListener("change",(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = ()=>{ try{ state = Object.assign({}, defaultState, JSON.parse(r.result)); persist(); render(); alert("Imported."); }catch{ alert("Invalid JSON"); } }; r.readAsText(f); });
+document.getElementById("btnReset").addEventListener("click",()=>{ if(!confirm("Clear ALL saved data on this device?")) return; localStorage.removeItem(STORAGE_KEY); state = structuredClone(defaultState); document.getElementById("logoPreview").src = state.settings.bill.logoDataUrl || ""; render(); });
+
+// initial render
+render();
+</script>
+</body>
+</html>
